@@ -4,25 +4,26 @@ module Ret
   class Fileset
     attr_reader :afiles
     
-    def self.new_from_directory(dir)
-      me = Fileset.new
-      afiles = Dir.new(dir).map do |f|
-        Afile.new(File.join(dir, f))
+    def initialize(arg)
+      def from_dir(dir)
+        @afiles = dir.map do |f|
+          Afile.new(File.join(dir.path, f))
+        end
       end
-      me.set_afiles afiles
-      return me
+      
+      if arg.is_a? String
+        from_dir(Dir.new(arg))
+      elsif arg.is_a? Dir
+        from_dir(arg)
+      else
+        raise TypeError, "Ret::Fileset.new called with incompatible type"
+      end
+      
     end
     
     def clone
       other = super.clone
       other.set_afiles @afiles.clone
     end
-    
-    #protected
-    
-    def set_afiles(afiles)
-      @afiles = afiles
-    end
-    
   end
 end
