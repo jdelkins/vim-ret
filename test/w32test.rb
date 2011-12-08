@@ -1,3 +1,5 @@
+$:.unshift(File.join(File.dirname(__FILE__), "../ruby"))
+
 require 'rubygems'
 require 'windows/api'
 require 'windows/file'
@@ -109,7 +111,7 @@ def get_owner2(file)
   domain_cch = [domain_buf.size].pack('L')
   sid_name = 0.chr * 4
 
-  LookupAccountSid(
+  LookupAccountSid( 
     nil,
     sid_ptr.unpack('L').first,
     name_buf,
@@ -124,8 +126,13 @@ def get_owner2(file)
   return domain_buf.strip + '\\' + name_buf.strip
 end
 
-d = Dir.new("C:\\Users\\jelkins")
-d.each do |file|
-  puts file + ": " + get_owner2(File.join(d.path, file))
+require 'ret/afile/win32/fileinfo'
+
+puts Ret::Afile::Win32::Fileinfo.basic_test
+
+dir = Dir.new("C:\\Users\\jde.ELKINS\\vimfiles")
+dir.each do |f|
+  puts f + ": " + Ret::Afile::Win32::Fileinfo.get_owner(dir.path + "\\" + f) if f != '.' and f != '..'
 end
+
 
