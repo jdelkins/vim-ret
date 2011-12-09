@@ -4,6 +4,10 @@
 //
 // Part of the Ret package, a file browser for the Vim editor.
 
+#if 1
+#define _USE_NTDLL_
+#endif
+
 #include <ruby.h>
 #include "fileinfo.h"
 
@@ -14,6 +18,11 @@
 #include "aclapi.h"
 #pragma comment(lib, "advapi32.lib")
 
+#ifdef _USE_NTDLL_
+#define DECL_IMPORT __declspec(dllimport)
+#include "ddk/ntddk.h"
+#include "security.h"
+#endif
 
 void Init_fileinfo()
 {
@@ -44,30 +53,52 @@ VALUE mf_get_owner(VALUE self, VALUE file)
 	LPTSTR DomainName = NULL;
 	DWORD dwAcctName = 1, dwDomainName = 1;
 	SID_NAME_USE eUse = SidTypeUnknown;
-	HANDLE hFile;
+	HANDLE hFile = INVALID_HANDLE_VALUE;
 	PSECURITY_DESCRIPTOR pSD = NULL;
 
 	char *filename = StringValueCStr(file);
-	char owner[100];
+	char owner[128];
+	char error[200];
 
+#ifdef _USE_NTDLL_
+	NTSTATUS status;
+	OBJECT_ATTRIBUTES oa;
+	IO_STATUS_BLOCK io;
+	InitializeObjectAttributes(
+			&oa,
+			TEXT(filename),
+			0,
+			NULL,
+			NULL);
 
+	status = NtOpenfile(
+			&hFile,
+			READ_CONTROL,
+			(POBJECT_ATTRIBUTES) &oa,
+			(PIO_STATUS_BLOCK) &io,
+			FILE_SHARE_VALID_FLAGS,
+			FILE_OPEN_FOR_BACKUP_INTENT);
+
+#else
 	// Get the handle of the file object.
 	hFile = CreateFile(
 			TEXT(filename),
-			GENERIC_READ,
-			FILE_SHARE_READ,
+			//GENERIC_READ,
+			READ_CONTROL,
+			//FILE_SHARE_READ,
+			FILE_SHARE_VALID_FLAGS,
 			NULL,
 			OPEN_EXISTING,
-			FILE_ATTRIBUTE_DIRECTORY,
+			FILE_ATTRIBUTE_NORMAL,
 			NULL);
+#endif
 
 	// Check GetLastError for CreateFile error code.
 	if (hFile == INVALID_HANDLE_VALUE) {
-		char error[200];
 		DWORD dwErrorCode = 0;
 
 		dwErrorCode = GetLastError();
-		sprintf(error, "%s: ", filename);
+		sprintf(error, "file %s: line %d: CreateFile() failed: %s: ", __FILE__, __LINE__, filename);
 		FormatMessage(
 				FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
 				NULL,
@@ -76,9 +107,7 @@ VALUE mf_get_owner(VALUE self, VALUE file)
 				error + strlen(error),
 				200,
 				NULL);
-
-		//sprintf(error, "CreateFile error = %d", dwErrorCode);
-		rb_raise(rb_eRuntimeError, error);
+		goto exception;
 	}
 
 	// Get the owner SID of the file.
@@ -94,12 +123,19 @@ VALUE mf_get_owner(VALUE self, VALUE file)
 
 	// Check GetLastError for GetSecurityInfo error condition.
 	if (dwRtnCode != ERROR_SUCCESS) {
-		char error[80];
 		DWORD dwErrorCode = 0;
 
 		dwErrorCode = GetLastError();
-		sprintf(error, "GetSecurityInfo error = %d", dwErrorCode);
-		rb_raise(rb_eRuntimeError, error);
+		sprintf(error, "file %s: line %d: GetSecurityInfo() failed: %s: ", __FILE__, __LINE__, filename);
+		FormatMessage(
+				FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+				NULL,
+				dwErrorCode,
+				0,
+				error + strlen(error),
+				200,
+				NULL);
+		goto exception;
 	}
 
 	// First call to LookupAccountSid to get the buffer sizes.
@@ -119,12 +155,11 @@ VALUE mf_get_owner(VALUE self, VALUE file)
 
 	// Check GetLastError for GlobalAlloc error condition.
 	if (AcctName == NULL) {
-		char error[80];
 		DWORD dwErrorCode = 0;
 
 		dwErrorCode = GetLastError();
 		sprintf(error, "GlobalAlloc error = %d", dwErrorCode);
-		rb_raise(rb_eRuntimeError, error);
+		goto exception;
 	}
 
 	DomainName = (LPTSTR)GlobalAlloc(
@@ -133,12 +168,11 @@ VALUE mf_get_owner(VALUE self, VALUE file)
 
 	// Check GetLastError for GlobalAlloc error condition.
 	if (DomainName == NULL) {
-		char error[80];
 		DWORD dwErrorCode = 0;
 
 		dwErrorCode = GetLastError();
 		sprintf(error, "GlobalAlloc error = %d", dwErrorCode);
-		rb_raise(rb_eRuntimeError, error);
+		goto exception;
 	}
 
 	// Second call to LookupAccountSid to get the account name.
@@ -153,19 +187,25 @@ VALUE mf_get_owner(VALUE self, VALUE file)
 
 	// Check GetLastError for LookupAccountSid error condition.
 	if (bRtnBool == FALSE) {
-		char error[80];
 		DWORD dwErrorCode = 0;
 
 		dwErrorCode = GetLastError();
-
 		if (dwErrorCode == ERROR_NONE_MAPPED)
 			sprintf(error, "Account owner not found for specified SID.");
 		else
 			sprintf(error, "Error in LookupAccountSid.");
-		rb_raise(rb_eRuntimeError, error);
+		goto exception;
 	}
 
 	// Return the account name.
-	return rb_str_new2(AcctName);
+	sprintf(owner, "%s\\%s", DomainName, AcctName);
+	return rb_str_new2(owner);
+
+exception:
+	if (NULL != AcctName)              GlobalFree(AcctName);
+	if (NULL != DomainName)            GlobalFree(DomainName);
+	if (hFile != INVALID_HANDLE_VALUE) CloseHandle(hFile);
+	rb_raise(rb_eRuntimeError, error);
+	return Qnil;
 }
 

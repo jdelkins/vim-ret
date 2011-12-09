@@ -130,9 +130,11 @@ require 'ret/afile/win32/fileinfo'
 
 puts Ret::Afile::Win32::Fileinfo.basic_test
 
-dir = Dir.new("C:\\Users\\jde.ELKINS\\vimfiles")
+dir = Dir.new("C:\\Users\\jelkins")
 dir.each do |f|
-  puts f + ": " + Ret::Afile::Win32::Fileinfo.get_owner(dir.path + "\\" + f) if f != '.' and f != '..'
+  #if !File.directory?(File.join(dir.path, f))
+    puts f + ": " + Ret::Afile::Win32::Fileinfo.get_owner(dir.path + "\\" + f) if f[0,1] != '.'
+  #end
 end
 
 
