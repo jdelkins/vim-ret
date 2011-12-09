@@ -154,17 +154,14 @@ end
 
 
 require 'ret/afile/win32/fileinfo'
-include Ret::Afile::Win32::Fileinfo
+include Ret::Afile::Win32
 
-puts basic_test
-
-
-dir = Dir.new("C:\\Users")
+dir = Dir.new("C:\\Users\\jelkins")
 dir.each do |f|
   begin
     file = dir.path + "\\" + f
-    owner = get_owner(file)
-    puts get_attribute_flags(file) + " " + f + " " + owner
+    fi = Fileinfo.new(file)
+    puts "#{fi.attributes.to_s} #{fi.owner} #{fi.filename}"
     #puts f + " " + get_owner(file)
   rescue RuntimeError
     puts f + ": <no access>"

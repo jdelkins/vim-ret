@@ -49,18 +49,23 @@ static struct attribute attr_table[] = {
 
 void Init_fileinfo()
 {
+	int i;
+
 	// modules
 	VALUE mRet = rb_define_module("Ret");
 	VALUE mRetAfile = rb_define_module_under(mRet, "Afile");
 	VALUE mRetAfileWin32 = rb_define_module_under(mRetAfile, "Win32");
-	VALUE mRetAfileWin32Fileinfo = rb_define_module_under(mRetAfileWin32, "Fileinfo");
-	int i;
 
-	// module functions
-	rb_define_module_function(mRetAfileWin32Fileinfo, "basic_test", mf_basic_test, 0);
-	rb_define_module_function(mRetAfileWin32Fileinfo, "get_owner", mf_get_owner, 1);
-	rb_define_module_function(mRetAfileWin32Fileinfo, "get_attributes", mf_get_attributes, 1);
-	rb_define_module_function(mRetAfileWin32Fileinfo, "get_attribute_flags", mf_get_attribute_flags, 1);
+	// classes
+	VALUE cFileinfo = rb_define_class_under(mRetAfileWin32, "Fileinfo", rb_cObject);
+
+	// methods
+	rb_define_method(cFileinfo, "initialize", m_initialize, 1);
+
+	// accessors
+	rb_define_attr(cFileinfo, "filename", 1, 0);
+	rb_define_attr(cFileinfo, "attributes", 1, 0);
+	rb_define_attr(cFileinfo, "owner", 1, 0);
 
 	// populate symbol table for file attributes
 	for (i = 0; i < attr_count; i++) {
@@ -69,14 +74,21 @@ void Init_fileinfo()
 	}
 }
 
-VALUE mf_basic_test(VALUE self)
+// Initialize class instance
+VALUE m_initialize(VALUE self, VALUE file)
 {
-	const char *s = "hello world";
-	return rb_str_new2(s);
+	rb_iv_set(self, "@filename", file);
+	rb_iv_set(self, "@owner", get_owner(self, file));
+
+	VALUE iv_attrs = get_attributes(self, file);
+	rb_iv_set(self, "@attributes", iv_attrs);
+	rb_define_singleton_method(iv_attrs, "to_s", singleton_attributes_to_s, 0);
+
+	return self;
 }
 
 // Reference: http://msdn.microsoft.com/en-us/library/aa446629(VS.85).aspx
-VALUE mf_get_owner(VALUE self, VALUE file)
+VALUE get_owner(VALUE self, VALUE file)
 {
 	DWORD dwRtnCode = 0;
 	PSID pSidOwner = NULL;
@@ -207,19 +219,30 @@ VALUE mf_get_owner(VALUE self, VALUE file)
 		goto exception;
 	}
 
-	// Return the account name.
+	// Format the return value
 	sprintf(owner, "%s\\%s", DomainName, AcctName);
+
+	// Clean up
+	GlobalFree(AcctName);
+	GlobalFree(DomainName);
+	CloseHandle(hFile);
+
+	// Successful return
 	return rb_str_new2(owner);
 
 exception:
 	if (NULL != AcctName)              GlobalFree(AcctName);
 	if (NULL != DomainName)            GlobalFree(DomainName);
 	if (hFile != INVALID_HANDLE_VALUE) CloseHandle(hFile);
-	rb_raise(rb_eRuntimeError, error);
-	return Qnil;
+
+	// the question: to raise or not ot raise?
+	//rb_raise(rb_eRuntimeError, error);
+	//return Qnil;
+	
+	return rb_str_new2("<unavailable>");
 }
 
-VALUE mf_get_attributes(VALUE self, VALUE file)
+VALUE get_attributes(VALUE self, VALUE file)
 {
 	const char *filename = STR2CSTR(file);
 	DWORD attr = GetFileAttributes(filename);
@@ -246,32 +269,19 @@ exception:
 	return Qnil;
 }
 
-VALUE mf_get_attribute_flags(VALUE self, VALUE file)
+VALUE singleton_attributes_to_s(VALUE self)
 {
-	const char *filename = STR2CSTR(file);
-	DWORD attr = GetFileAttributes(filename);
-	char output[15] = "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
-	VALUE ary = rb_ary_new();
-	char error[300];
 	int i;
-
-	if (INVALID_FILE_ATTRIBUTES == attr) {
-		sprintf(error, "file %s: line %d: GetFileAttributes() failed: %s: ", __FILE__, __LINE__, filename);
-		goto exception;
-	}
+	char output[16] = "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
 
 	for (i = 0; i < attr_count; i++) {
 		struct attribute *a = &attr_table[i];
-		if (attr & a->mask)
+		if (Qtrue == rb_ary_includes(self, ID2SYM(a->symid)))
 			output[i] = a->flag;
 		else
 			output[i] = '-';
 	}
 
 	return rb_str_new2(output);
-
-exception:
-	rb_raise(rb_eRuntimeError, error);
-	return Qnil;
 }
 
