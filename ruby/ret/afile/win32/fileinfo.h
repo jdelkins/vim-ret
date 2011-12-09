@@ -16,4 +16,6 @@ void Init_mytest();
 // module functions
 VALUE mf_basic_test(VALUE self);
 VALUE mf_get_owner(VALUE self, VALUE file);
+VALUE mf_get_attributes(VALUE self, VALUE file);
+VALUE mf_get_attribute_flags(VALUE self, VALUE file);
 

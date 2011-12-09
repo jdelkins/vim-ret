@@ -4,9 +4,7 @@
 //
 // Part of the Ret package, a file browser for the Vim editor.
 
-#if 1
-#define _USE_NTDLL_
-#endif
+// Includes
 
 #include <ruby.h>
 #include "fileinfo.h"
@@ -18,11 +16,36 @@
 #include "aclapi.h"
 #pragma comment(lib, "advapi32.lib")
 
-#ifdef _USE_NTDLL_
-#define DECL_IMPORT __declspec(dllimport)
-#include "ddk/ntddk.h"
-#include "security.h"
+// Static data related to file attributes
+
+struct attribute {
+	ID		symid;
+	char		flag;
+	unsigned long	mask;
+	const char 	*name;
+};
+static struct attribute attr_table[] = {
+	{0, 'd', FILE_ATTRIBUTE_DIRECTORY,           "FILE_ATTRIBUTE_DIRECTORY"},
+	{0, 'l', FILE_ATTRIBUTE_REPARSE_POINT,       "FILE_ATTRIBUTE_REPARSE_POINT"},
+	{0, 'r', FILE_ATTRIBUTE_READONLY,            "FILE_ATTRIBUTE_READONLY"},
+	{0, 'h', FILE_ATTRIBUTE_HIDDEN,              "FILE_ATTRIBUTE_HIDDEN"},
+	{0, 's', FILE_ATTRIBUTE_SYSTEM,              "FILE_ATTRIBUTE_SYSTEM"},
+	{0, 'a', FILE_ATTRIBUTE_ARCHIVE,             "FILE_ATTRIBUTE_ARCHIVE"},
+	{0, 'c', FILE_ATTRIBUTE_COMPRESSED,          "FILE_ATTRIBUTE_COMPRESSED"},
+	{0, 'b', FILE_ATTRIBUTE_DEVICE,              "FILE_ATTRIBUTE_DEVICE"},
+	{0, 'e', FILE_ATTRIBUTE_ENCRYPTED,           "FILE_ATTRIBUTE_ENCRYPTED"},
+	{0, 'i', FILE_ATTRIBUTE_NOT_CONTENT_INDEXED, "FILE_ATTRIBUTE_NOT_CONTENT_INDEXED"},
+	{0, 'o', FILE_ATTRIBUTE_OFFLINE,             "FILE_ATTRIBUTE_OFFLINE"},
+	{0, 'z', FILE_ATTRIBUTE_SPARSE_FILE,         "FILE_ATTRIBUTE_SPARSE_FILE"},
+	{0, 't', FILE_ATTRIBUTE_TEMPORARY,           "FILE_ATTRIBUTE_TEMPORARY"},
+	{0, ' ', FILE_ATTRIBUTE_NORMAL,              "FILE_ATTRIBUTE_NORMAL"},
+#if 0   // not implemented
+	{0, FILE_ATTRIBUTE_VIRTUAL,             "FILE_ATTRIBUTE_VIRTUAL"}
 #endif
+};
+#define attr_count 14
+
+// Initialization
 
 void Init_fileinfo()
 {
@@ -31,10 +54,19 @@ void Init_fileinfo()
 	VALUE mRetAfile = rb_define_module_under(mRet, "Afile");
 	VALUE mRetAfileWin32 = rb_define_module_under(mRetAfile, "Win32");
 	VALUE mRetAfileWin32Fileinfo = rb_define_module_under(mRetAfileWin32, "Fileinfo");
+	int i;
 
 	// module functions
 	rb_define_module_function(mRetAfileWin32Fileinfo, "basic_test", mf_basic_test, 0);
 	rb_define_module_function(mRetAfileWin32Fileinfo, "get_owner", mf_get_owner, 1);
+	rb_define_module_function(mRetAfileWin32Fileinfo, "get_attributes", mf_get_attributes, 1);
+	rb_define_module_function(mRetAfileWin32Fileinfo, "get_attribute_flags", mf_get_attribute_flags, 1);
+
+	// populate symbol table for file attributes
+	for (i = 0; i < attr_count; i++) {
+		struct attribute *a = &attr_table[i];
+		a->symid = rb_intern(a->name);
+	}
 }
 
 VALUE mf_basic_test(VALUE self)
@@ -60,38 +92,16 @@ VALUE mf_get_owner(VALUE self, VALUE file)
 	char owner[128];
 	char error[200];
 
-#ifdef _USE_NTDLL_
-	NTSTATUS status;
-	OBJECT_ATTRIBUTES oa;
-	IO_STATUS_BLOCK io;
-	InitializeObjectAttributes(
-			&oa,
-			TEXT(filename),
-			0,
-			NULL,
-			NULL);
-
-	status = NtOpenfile(
-			&hFile,
-			READ_CONTROL,
-			(POBJECT_ATTRIBUTES) &oa,
-			(PIO_STATUS_BLOCK) &io,
-			FILE_SHARE_VALID_FLAGS,
-			FILE_OPEN_FOR_BACKUP_INTENT);
-
-#else
 	// Get the handle of the file object.
 	hFile = CreateFile(
 			TEXT(filename),
-			//GENERIC_READ,
-			READ_CONTROL,
-			//FILE_SHARE_READ,
-			FILE_SHARE_VALID_FLAGS,
+			GENERIC_READ,
+			FILE_SHARE_READ,
 			NULL,
 			OPEN_EXISTING,
-			FILE_ATTRIBUTE_NORMAL,
+			//FILE_ATTRIBUTE_NORMAL,
+			FILE_FLAG_BACKUP_SEMANTICS,
 			NULL);
-#endif
 
 	// Check GetLastError for CreateFile error code.
 	if (hFile == INVALID_HANDLE_VALUE) {
@@ -205,6 +215,62 @@ exception:
 	if (NULL != AcctName)              GlobalFree(AcctName);
 	if (NULL != DomainName)            GlobalFree(DomainName);
 	if (hFile != INVALID_HANDLE_VALUE) CloseHandle(hFile);
+	rb_raise(rb_eRuntimeError, error);
+	return Qnil;
+}
+
+VALUE mf_get_attributes(VALUE self, VALUE file)
+{
+	const char *filename = STR2CSTR(file);
+	DWORD attr = GetFileAttributes(filename);
+	VALUE ary = rb_ary_new();
+	char error[300];
+	int i;
+
+	if (INVALID_FILE_ATTRIBUTES == attr) {
+		sprintf(error, "file %s: line %d: GetFileAttributes() failed: %s: ", __FILE__, __LINE__, filename);
+		goto exception;
+	}
+
+	for (i = 0; i < attr_count; i++) {
+		struct attribute *a = &attr_table[i];
+		if (attr & a->mask) {
+			rb_ary_push(ary, ID2SYM(a->symid));
+		}
+	}
+
+	return ary;
+
+exception:
+	rb_raise(rb_eRuntimeError, error);
+	return Qnil;
+}
+
+VALUE mf_get_attribute_flags(VALUE self, VALUE file)
+{
+	const char *filename = STR2CSTR(file);
+	DWORD attr = GetFileAttributes(filename);
+	char output[15] = "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
+	VALUE ary = rb_ary_new();
+	char error[300];
+	int i;
+
+	if (INVALID_FILE_ATTRIBUTES == attr) {
+		sprintf(error, "file %s: line %d: GetFileAttributes() failed: %s: ", __FILE__, __LINE__, filename);
+		goto exception;
+	}
+
+	for (i = 0; i < attr_count; i++) {
+		struct attribute *a = &attr_table[i];
+		if (attr & a->mask)
+			output[i] = a->flag;
+		else
+			output[i] = '-';
+	}
+
+	return rb_str_new2(output);
+
+exception:
 	rb_raise(rb_eRuntimeError, error);
 	return Qnil;
 }

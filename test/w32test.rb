@@ -126,15 +126,48 @@ def get_owner2(file)
   return domain_buf.strip + '\\' + name_buf.strip
 end
 
-require 'ret/afile/win32/fileinfo'
+$attrs = [
+  [:FILE_ATTRIBUTE_DIRECTORY, "d"],
+  [:FILE_ATTRIBUTE_REPARSE_POINT, "l"],
+  [:FILE_ATTRIBUTE_READONLY, "r"],
+  [:FILE_ATTRIBUTE_HIDDEN, "h"],
+  [:FILE_ATTRIBUTE_SYSTEM, "s"],
+  [:FILE_ATTRIBUTE_ARCHIVE, "a"],
+  [:FILE_ATTRIBUTE_COMPRESSED, "c"],
+  [:FILE_ATTRIBUTE_DEVICE, "b"],
+  [:FILE_ATTRIBUTE_ENCRYPTED, "e"],
+  [:FILE_ATTRIBUTE_NOT_CONTENT_INDEXED, "i"],
+  [:FILE_ATTRIBUTE_OFFLINE, "o"],
+  [:FILE_ATTRIBUTE_SPARSE_FILE, "z"],
+  [:FILE_ATTRIBUTE_TEMPORARY, "t"],
+]
 
-puts Ret::Afile::Win32::Fileinfo.basic_test
-
-dir = Dir.new("C:\\Users\\jelkins")
-dir.each do |f|
-  #if !File.directory?(File.join(dir.path, f))
-    puts f + ": " + Ret::Afile::Win32::Fileinfo.get_owner(dir.path + "\\" + f) if f[0,1] != '.'
-  #end
+#$attrs.each { |a| puts a }
+  
+def attribute_map(ary)
+  key = $attrs.map do |a|
+    ary.include?(a[0]) ? a[1] : "-" 
+  end
+  return key.join
 end
 
+
+
+require 'ret/afile/win32/fileinfo'
+include Ret::Afile::Win32::Fileinfo
+
+puts basic_test
+
+
+dir = Dir.new("C:\\Users")
+dir.each do |f|
+  begin
+    file = dir.path + "\\" + f
+    owner = get_owner(file)
+    puts get_attribute_flags(file) + " " + f + " " + owner
+    #puts f + " " + get_owner(file)
+  rescue RuntimeError
+    puts f + ": <no access>"
+  end
+end
 
