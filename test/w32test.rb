@@ -18,7 +18,8 @@ def get_owner(file)
     FILE_SHARE_READ,
     nil,
     OPEN_EXISTING,
-    FILE_ATTRIBUTE_NORMAL,
+    #FILE_ATTRIBUTE_NORMAL,
+    FILE_FLAG_BACKUP_SEMANTICS,
     nil
   )
 
@@ -162,6 +163,16 @@ dir.each do |f|
     file = dir.path + "\\" + f
     fi = Fileinfo.new(file)
     puts "#{fi.attributes.to_s} #{fi.owner} #{fi.filename}"
+    #puts f + " " + get_owner(file)
+  rescue RuntimeError
+    puts f + ": <no access>"
+  end
+end
+
+dir.each do |f|
+  begin
+    file = dir.path + "\\" + f
+    puts "#{get_owner(file)} #{file}"
     #puts f + " " + get_owner(file)
   rescue RuntimeError
     puts f + ": <no access>"
