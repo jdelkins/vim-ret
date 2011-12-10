@@ -45,7 +45,19 @@ static struct attribute attr_table[] = {
 };
 #define attr_count 14
 
+// expressed in ruby standard for DateTime: faction of a day
+static double utc_offset;
+
 // Initialization
+
+static void get_utc_offset()
+{
+	TIME_ZONE_INFORMATION tz;
+
+	GetTimeZoneInformation(&tz);  // return value indicates current DST status, ignoring
+	utc_offset = - ((double) tz.Bias) / ((double) (60.0 * 24.0));
+	return;
+}
 
 void Init_fileinfo()
 {
@@ -53,11 +65,10 @@ void Init_fileinfo()
 
 	// modules
 	VALUE mRet = rb_define_module("Ret");
-	VALUE mRetAfile = rb_define_module_under(mRet, "Afile");
-	VALUE mRetAfileWin32 = rb_define_module_under(mRetAfile, "Win32");
+	VALUE mRetWin32 = rb_define_module_under(mRet, "Win32");
 
 	// classes
-	VALUE cFileinfo = rb_define_class_under(mRetAfileWin32, "Fileinfo", rb_cObject);
+	VALUE cFileinfo = rb_define_class_under(mRetWin32, "Fileinfo", rb_cObject);
 
 	// methods
 	rb_define_method(cFileinfo, "initialize", m_initialize, 1);
@@ -66,12 +77,24 @@ void Init_fileinfo()
 	rb_define_attr(cFileinfo, "filename", 1, 0);
 	rb_define_attr(cFileinfo, "attributes", 1, 0);
 	rb_define_attr(cFileinfo, "owner", 1, 0);
+	rb_define_attr(cFileinfo, "ctime", 1, 0);
+	rb_define_attr(cFileinfo, "atime", 1, 0);
+	rb_define_attr(cFileinfo, "mtime", 1, 0);
+#if 0
+	rb_define_attr(cFileinfo, "nlinks", 1, 0);
+#endif
+	rb_define_attr(cFileinfo, "size", 1, 0);
 
 	// populate symbol table for file attributes
 	for (i = 0; i < attr_count; i++) {
 		struct attribute *a = &attr_table[i];
 		a->symid = rb_intern(a->name);
 	}
+
+	// date functions require learning the machine UTC offset
+	rb_require("date");
+	get_utc_offset();
+	return;
 }
 
 // Initialize class instance
@@ -80,8 +103,12 @@ VALUE m_initialize(VALUE self, VALUE file)
 	rb_iv_set(self, "@filename", file);
 	rb_iv_set(self, "@owner", get_owner(self, file));
 
-	VALUE iv_attrs = get_attributes(self, file);
-	rb_iv_set(self, "@attributes", iv_attrs);
+	// a bunch of the iv's are set in get_attributes
+	get_attributes(self, file);
+
+	// define a singleton override for the @attributes array .to_s method,
+	// which returns a block of flags suitable for a file listing
+	VALUE iv_attrs = rb_iv_get(self, "@attributes");
 	rb_define_singleton_method(iv_attrs, "to_s", singleton_attributes_to_s, 0);
 
 	return self;
@@ -242,31 +269,118 @@ exception:
 	return rb_str_new2("<unavailable>");
 }
 
-VALUE get_attributes(VALUE self, VALUE file)
+static VALUE date_by_filetime(LPFILETIME tm)
+{
+	FILETIME localtm;
+	SYSTEMTIME sys;
+
+	// return value ignored for the next 2 function calls
+	FileTimeToLocalFileTime(tm, &localtm);
+	FileTimeToSystemTime(&localtm, &sys);
+	VALUE args[] = {
+		INT2FIX(sys.wYear),
+		INT2FIX(sys.wMonth),
+		INT2FIX(sys.wDay),
+		INT2FIX(sys.wHour),
+		INT2FIX(sys.wMinute),
+		INT2FIX(sys.wSecond),
+		rb_float_new(utc_offset)
+	};
+	//return rb_class_new_instance(7, args, rb_path2class("DateTime"));
+	return rb_funcall2(rb_path2class("DateTime"), rb_intern("civil"), 7, args);
+}
+
+void get_attributes(VALUE self, VALUE file)
 {
 	const char *filename = STR2CSTR(file);
-	DWORD attr = GetFileAttributes(filename);
 	VALUE ary = rb_ary_new();
+	long long size;
+
 	char error[300];
 	int i;
 
-	if (INVALID_FILE_ATTRIBUTES == attr) {
-		sprintf(error, "file %s: line %d: GetFileAttributes() failed: %s: ", __FILE__, __LINE__, filename);
+#if 0
+	BY_HANDLE_FILE_INFORMATION info;
+	HANDLE hFile = NULL;
+	// Get the handle of the file object.
+	hFile = CreateFile(
+			TEXT(filename),
+			GENERIC_READ,
+			FILE_SHARE_READ,
+			NULL,
+			OPEN_EXISTING,
+			FILE_FLAG_BACKUP_SEMANTICS,
+			NULL);
+
+	// Check GetLastError for CreateFile error code.
+	if (hFile == INVALID_HANDLE_VALUE) {
+		DWORD dwErrorCode = 0;
+
+		dwErrorCode = GetLastError();
+		sprintf(error, "file %s: line %d: CreateFile() failed: %s: ", __FILE__, __LINE__, filename);
+		FormatMessage(
+				FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+				NULL,
+				dwErrorCode,
+				0,
+				error + strlen(error),
+				200,
+				NULL);
 		goto exception;
 	}
 
+	BOOL rc = GetFileInformationByHandle(hFile, &info);
+#endif
+	WIN32_FILE_ATTRIBUTE_DATA info;
+	BOOL rc = GetFileAttributesEx(filename, GetFileExInfoStandard, &info);
+
+	if (!rc) {
+		DWORD dwErrorCode = GetLastError();
+
+		sprintf(error, "file %s: line %d: GetFileAttributes() failed: %s: ", __FILE__, __LINE__, filename);
+		FormatMessage(
+				FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+				NULL,
+				dwErrorCode,
+				0,
+				error + strlen(error),
+				200,
+				NULL);
+		goto exception;
+	}
+
+
+
+	// populate file attributes array
 	for (i = 0; i < attr_count; i++) {
 		struct attribute *a = &attr_table[i];
-		if (attr & a->mask) {
+		if (info.dwFileAttributes & a->mask) {
 			rb_ary_push(ary, ID2SYM(a->symid));
 		}
 	}
+	rb_iv_set(self, "@attributes", ary);
+	rb_iv_set(self, "@ctime", date_by_filetime(&info.ftCreationTime));
+	rb_iv_set(self, "@atime", date_by_filetime(&info.ftLastAccessTime));
+	rb_iv_set(self, "@mtime", date_by_filetime(&info.ftLastWriteTime));
+#if 0
+	rb_iv_set(self, "@nlinks", INT2FIX(info.nNumberOfLinks));
+#endif
+	size = (((unsigned long long) info.nFileSizeHigh) << 32) + ((unsigned long long) info.nFileSizeLow);
+	rb_iv_set(self, "@size", ULL2NUM(size));
 
-	return ary;
+#if 0
+	if (NULL != hFile)
+		CloseHandle(hFile);
+#endif
+	return;
 
 exception:
+#if 0
+	if (NULL != hFile)
+		CloseHandle(hFile);
+#endif
 	rb_raise(rb_eRuntimeError, error);
-	return Qnil;
+	return;
 }
 
 VALUE singleton_attributes_to_s(VALUE self)

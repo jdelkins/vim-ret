@@ -1,29 +1,39 @@
-require 'rubygems'
-require 'win32/file'
+require 'ret/afile/win32/fileinfo'
 
 module Ret
   class Afile
-    def listing
-      x = "#{typecode} #{attributes} #{permissions} #{@lstat.size} #{@name}"
-      # TODO: symlink checking
-      return x
+
+    def subinit(path)
+      @fileinfo = Win32::Fileinfo.new(path)
     end
     
-    private
+    def listing(format)
+      sprintf("#{format[0]} #{format[1]} #{format[2]} #{format[3]} #{format[4]}", @fileinfo.attributes.to_s, @fileinfo.owner, @fileinfo.size, @fileinfo.mtime.strftime("%F %H:%M"), @name)
+      # TODO: symlink checking
+    end
     
-    def permissions
-      interesting_perms = File.get_permissions(File.join(@dirname, @name)).select do | user, mask |
-        not user.to_s()[/CREATOR OWNER|BUILTIN\\|NT AUTHORITY\\|NT SERVICE/]
-      end
-      converted = interesting_perms.map do | user, mask |
-        "#{user}:#{File.securities(mask)}"
-      end
-      converted.nil? ? "SYSTEM" : converted.join(" ")
+    def owner
+      @fileinfo.owner
+    end
+    
+    def size
+      @fileinfo.size
     end
     
     def attributes
-      File.attributes(File.join(@dirname, @name)).join()
+      @fileinfo.attributes
+    end
+    
+    def mtime
+      @fileinfo.mtime
+    end
+    
+    def ctime
+      @fileinfo.ctime
+    end
+    
+    def atime
+      @fileinof.atime
     end
   end
-  
 end

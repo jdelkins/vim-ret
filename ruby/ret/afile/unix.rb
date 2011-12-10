@@ -11,6 +11,14 @@ module Ret
       Sticky = 't'
     end
     
+    def subinit(path)
+      @lstat = File.lstat(path)
+      if File.symlink?(path)
+        @target = File.readlink(path)
+        @target_stat = File.stat(@target)
+      end
+    end
+    
     def listing
       x = "#{typecode}" +
         "#{rw(0400)}#{rw(0200)}#{x(0100)}" +

@@ -1,4 +1,4 @@
-if ENV['OS'] == 'Windows_NT'
+if Ret::platform == :Windows
   require 'ret/afile/win32'
 else
   require 'ret/afile/unix'
@@ -23,11 +23,8 @@ module Ret
     def initialize(path)
       @name = File.basename(path)
       @dirname = File.dirname(path)
-      @lstat = File.lstat(path)
-      if File.symlink?(path)
-        @target = File.readlink(path)
-        @target_stat = File.stat(@target)
-      end
+      
+      subinit(path)
     end
 
     def typecode

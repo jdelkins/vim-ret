@@ -16,5 +16,5 @@ void Init_mytest();
 // module functions
 VALUE m_initialize(VALUE self, VALUE file);
 VALUE get_owner(VALUE self, VALUE file);
-VALUE get_attributes(VALUE self, VALUE file);
+void get_attributes(VALUE self, VALUE file);
 VALUE singleton_attributes_to_s(VALUE self);
