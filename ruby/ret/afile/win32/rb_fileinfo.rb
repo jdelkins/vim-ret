@@ -1,4 +1,8 @@
-$:.unshift(File.join(File.dirname(__FILE__), "../ruby"))
+# This is the basis of a potentially "near native" ruby implementation of the Fileinfo class
+# For now this is not used, just some prototyping code that I was testing out. Functionality
+# currently is implemented in a C langugate extension
+#
+# --JDE
 
 require 'rubygems'
 require 'windows/api'
@@ -153,21 +157,7 @@ def attribute_map(ary)
 end
 
 
-
-require 'ret/afile/win32/fileinfo'
-include Ret::Afile::Win32
-
-dir = Dir.new("C:\\Users\\jelkins")
-dir.each do |f|
-  begin
-    file = dir.path + "\\" + f
-    fi = Fileinfo.new(file)
-    puts "#{fi.attributes.to_s} #{fi.owner} #{fi.filename}"
-    #puts f + " " + get_owner(file)
-  rescue RuntimeError
-    puts f + ": <no access>"
-  end
-end
+# test script
 
 dir.each do |f|
   begin
@@ -178,4 +168,3 @@ dir.each do |f|
     puts f + ": <no access>"
   end
 end
-
