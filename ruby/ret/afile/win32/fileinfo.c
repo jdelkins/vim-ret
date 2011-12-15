@@ -292,7 +292,7 @@ static VALUE date_by_filetime(LPFILETIME tm)
 
 void get_attributes(VALUE self, VALUE file)
 {
-	const char *filename = STR2CSTR(file);
+	const char *filename = StringValueCStr(file);
 	VALUE ary = rb_ary_new();
 	long long size;
 
