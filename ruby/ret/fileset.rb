@@ -44,8 +44,8 @@ module Ret
     def column_format_win32
       [
         "%s",
-        "%-" + (@afiles.max { |a,f| a.owner.length <=> f.owner.length }).owner.length.to_s + "s",
-        "%" + (@afiles.max { |a,f| a.size.to_s().length <=> f.size.to_s().length }).size.to_s().length.to_s + "d",
+        "%-#{(@afiles.map { |f| f.owner.length }).max.to_s}s",
+        "%#{(@afiles.map { |f| f.size.to_s.length }).max.to_s}s",
         "%s",
         "%s"
       ]

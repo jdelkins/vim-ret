@@ -8,7 +8,7 @@ module Ret
     end
     
     def listing(format)
-      sprintf("#{format[0]} #{format[1]} #{format[2]} #{format[3]} #{format[4]}", @fileinfo.attributes.to_s, @fileinfo.owner, @fileinfo.size, @fileinfo.mtime.strftime("%F %H:%M"), @name)
+      sprintf(format.join(" "), @fileinfo.attributes.to_s, @fileinfo.owner, @fileinfo.size, @fileinfo.mtime.strftime("%F %H:%M"), @name)
       # TODO: symlink checking
     end
     
