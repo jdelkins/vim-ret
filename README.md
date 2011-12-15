@@ -17,6 +17,7 @@ Other inspriations include [Command-T][] and [LustyExplorer][Lusty].
 
 [Perlbrws]: https://github.com/jdelkins/vim-perlbrws
 [Perl]: http://perl.org/
+[Ruby]: http://www.ruby-lang.org/en/
 [Command-T]: http://git.wincent.com/command-t.git
 [Lusty]: https://github.com/sjbach/lusty
 
