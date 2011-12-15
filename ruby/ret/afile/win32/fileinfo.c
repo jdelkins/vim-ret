@@ -100,6 +100,7 @@ void Init_fileinfo()
 // Initialize class instance
 VALUE m_initialize(VALUE self, VALUE file)
 {
+	// TODO: @filename is likely not useful and could be removed.
 	rb_iv_set(self, "@filename", file);
 	rb_iv_set(self, "@owner", get_owner(self, file));
 
