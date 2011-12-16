@@ -20,7 +20,7 @@ module Ret
     
     attr_reader :name
 
-    def initialize(path)
+    def initialize(base, relpath)
       @name = File.basename(path)
       @dirname = File.dirname(path)
       

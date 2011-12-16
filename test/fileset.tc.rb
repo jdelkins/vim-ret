@@ -13,7 +13,3 @@ def ls(dir)
 end
 
 ls ENV["USERPROFILE"]
-  
- # + "/vimfiles/bundle/lusty/src"
-
-#ls "C:\\Program Files (x86)"

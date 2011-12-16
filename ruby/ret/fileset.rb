@@ -8,7 +8,7 @@ module Ret
       def from_dir(dir)
         @afiles = dir.map do |f|
           #Afile.new(File.join(dir.path, f))
-          Afile.new(dir.path + "\\" + f)
+          Afile.new(dir.path, f)
         end
       end
       
@@ -19,8 +19,13 @@ module Ret
       else
         raise TypeError, "Ret::Fileset.new called with incompatible type"
       end
-      
     end
+
+    # rolls up contents of all directories into this direcotry
+    def rollup()
+      @afiles.each do |f|
+        if f.directory?
+          nfs = new Fileset(f.dir)
     
     def list
       # determine column widths and pass to listing
