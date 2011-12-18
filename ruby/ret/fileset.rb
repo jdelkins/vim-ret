@@ -10,7 +10,7 @@ module Ret
     attr_reader :skipdots
     
     def initialize(basedir, skipdots=false, relpath='.')
-      @basedir = basedir
+      @basedir = absolute? basedir ? basedir : absolutize basedir
       @relpath = relpath
       @afiles = []
       @skipdots = skipdots
@@ -46,6 +46,7 @@ module Ret
       if absolute? newbasedir
         initialize(newbasedir, @skipdots, '.')
       else
+        basedir2 = normalize(pathjoin(@basedir, newbasedir))
         initialize(basedir2, @skipdots, '.')
       end
       expand() if @mode == :expanded
@@ -108,14 +109,31 @@ module Ret
     
     # remove . and .. elements from an absolute or relative path
     def normalize(dir)
-      fixed = dir
+      def root(d)
+        case Ret.platform
+        when :Unix    then '/'
+        when :Windows
+          if d =~ /^(\/\/|\\\\)/
+            '\\\\'
+          else
+            ''
+          end
+        end
+      end
+      if absolute? dir
+        fixed = root dir
+      else
+        fixed = ''
+      end
       dir.split(@@pathsepre).each do |el|
         case el
+        when ''       then next
         when '.'      then next
         when '..'     then fixed = File.dirname(fixed)
         else               fixed = pathjoin(fixed, el)
         end
       end
+      return fixed
     end
 
     case Ret.platform
