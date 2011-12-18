@@ -10,43 +10,37 @@ module Ret
     attr_reader :skipdots
     
     def initialize(basedir, skipdots=false, relpath='.')
-      @basedir = absolute? basedir ? basedir : absolutize basedir
+      @basedir = Fileset.normalize(Fileset.absolute?(basedir) ? basedir : Fileset.absolutize(basedir))
       @relpath = relpath
       @afiles = []
       @skipdots = skipdots
 
-      fullpath = if relpath == '.'
-              @basedir
-            else
-              case Ret.platform
-              when :Unix    then File.join(@baseidr, @relpath)
-              when :Windows then "#{@basedir}\\#{@relpath}"
-              end
-            end
+      fullpath = if @relpath == '.'
+                   @basedir
+                 else
+                   Fileset.pathjoin(@basedir, @relpath)
+                 end
 
       Dir.new(fullpath).each do |f|
         #Afile.new(File.join(dir.path, f))
         next if f == '.'
-        next if @skipdots and f.start_with? '.'
+        next if @skipdots and f.start_with? '.' and f != '..'
         fp = if @relpath == '.'
                f
              else
-               case Ret.platform
-               when :Unix    then File.join(@relpath, f)
-               when :Windows then "#{@relpath}\\#{f}"
-               end
+               Fileset.pathjoin(@relpath, f)
              end
         af = Afile.new(@basedir, fp)
-        next if @skipdots and af.hidden?
+        next if @skipdots and af.hidden? and f != '..'
         @afiles << Afile.new(@basedir, fp)
       end
     end
 
     def rebase(newbasedir)
-      if absolute? newbasedir
+      if Fileset.absolute? newbasedir
         initialize(newbasedir, @skipdots, '.')
       else
-        basedir2 = normalize(pathjoin(@basedir, newbasedir))
+        basedir2 = Fileset.normalize(Fileset.pathjoin(@basedir, newbasedir))
         initialize(basedir2, @skipdots, '.')
       end
       expand() if @mode == :expanded
@@ -69,7 +63,7 @@ module Ret
         end
         # skip any file with dots if so directed
         if @skipdots and f.hidden?
-          delete << f
+          delete << f unless ['.', '..'].include? f.relpath
           next
         end
         if f.directory?
@@ -108,24 +102,21 @@ module Ret
     protected
     
     # remove . and .. elements from an absolute or relative path
-    def normalize(dir)
-      def root(d)
-        case Ret.platform
-        when :Unix    then '/'
-        when :Windows
-          if d =~ /^(\/\/|\\\\)/
-            '\\\\'
-          else
-            ''
-          end
-        end
-      end
-      if absolute? dir
-        fixed = root dir
-      else
-        fixed = ''
-      end
-      dir.split(@@pathsepre).each do |el|
+    def self.normalize(dir)
+      fixed, _sep, rest = if absolute? dir
+                            case Ret.platform
+                            when :Unix    then [ '/', '', dir[1..-1] ]
+                            when :Windows
+                              if dir =~ /^\\\\|\/\//
+                                [ '\\\\', '', dir[2..-1] ]
+                              else
+                                dir.partition /[\/\\]/
+                              end
+                            end
+                          else
+                            [ '', '', dir ]
+                          end
+      rest.split(@@pathsepre).each do |el|
         case el
         when ''       then next
         when '.'      then next
@@ -145,7 +136,7 @@ module Ret
     when :Windows
       def self.absolute?(dir); dir =~ /^([A-Z]:(\\|\/)|\\\\)/; end
       def self.pathjoin(a, b); "#{a}\\#{b}"; end
-      def self.absolutize(d);  pathjoin(Dir.pwd.gsub('/', '\\')}, d); end
+      def self.absolutize(d);  pathjoin(Dir.pwd.gsub('/', '\\'), d); end
       @@pathsepre = /[\/\\]/
     end
 
