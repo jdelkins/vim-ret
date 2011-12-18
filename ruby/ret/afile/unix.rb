@@ -11,12 +11,21 @@ module Ret
       Sticky = 't'
     end
     
-    def subinit(path)
-      @lstat = File.lstat(path)
-      if File.symlink?(path)
-        @target = File.readlink(path)
+    def subinit()
+      file = File.join(@basedir, @relpath)
+      @lstat = File.lstat(file)
+      if File.symlink?(file)
+        @target = File.readlink(file)
         @target_stat = File.stat(@target)
       end
+    end
+
+    def directory?()
+      @lstat.directory?
+    end
+
+    def hidden?()
+      File.basename(@relpath).start_with? '.'
     end
     
     def listing
